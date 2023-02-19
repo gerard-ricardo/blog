@@ -1,2 +1,2 @@
 # blog
-This is a repository for code kept on my blog gfricardo
+This is a repository for code kept on my blog gfricardo.com
