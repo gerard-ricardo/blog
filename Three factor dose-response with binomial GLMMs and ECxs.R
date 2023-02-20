@@ -135,3 +135,88 @@ p0
 
 
 
+###########################
+#Comparing EC50s between two or more GLMM models
+ec.df1
+
+
+#Bootstrapped confidence intervals on ECx values
+library(lme4)
+md1 =glmer(cbind(suc,(tot-suc))~ raw.x * factor +(1|obs), data1, family='binomial' )
+sims = 200 #number of simulations.
+lowerCI = 0.025*sims
+median.CI = 0.5*sims
+upperCI = 0.975*sims
+# ecx <- (logit(0.5) - coef(md1)[1])/coef(md1)[2]
+predFun2<-function(.)((eta1 - fixef(.)[1])/fixef(.)[2]) #define the function
+bb1<-bootMer(md1,FUN=predFun2,nsim=sims, parallel = "multicore", .progress = 'txt' ) #get bootstrapping, 200 sims
+bb_se1<-apply(bb1$t,2,function(X) X[order(X)]) #apply function
+median<-bb_se1[median.CI,] #find the 50%
+low<-bb_se1[lowerCI,] #find the bottom 2.5%
+up<-bb_se1[upperCI,] #find the top 2.5%
+
+ec.df1.boot = data.frame(median, low, up)
+ec.df1.boot
+
+plot(density(bb1$t))
+
+#Bootstrapped confidence intervals for factor b and c
+library(lme4)
+data1$factor <- relevel(data1$factor, ref = "b") #set reference levels for GLMs
+md2 <- glmer(cbind(suc,(tot-suc))~raw.x*factor+(1|obs) ,data1,family='binomial' )
+bb2<-bootMer(md2,FUN=predFun2,nsim=sims, parallel = "multicore", .progress = 'txt' ) #get bootstrapping, 200 sims
+data1$factor <- relevel(data1$factor, ref = "c") #set reference levels for GLMs
+md3 <- glmer(cbind(suc,(tot-suc))~raw.x*factor+(1|obs) ,data1,family='binomial' )
+bb3<-bootMer(md3,FUN=predFun2,nsim=sims, parallel = "multicore", .progress = 'txt' ) #get bootstrapping, 200 sims
+all.dist = data.frame('a' = as.vector(bb1$t), 'b' = as.vector(bb2$t), 'c' = as.vector(bb3$t))
+all.dist.long <- gather(all.dist, factor, ecx, a:c, factor_key=TRUE)
+
+#Differences posterior
+df4.s = data.frame(atob= all.dist$a - all.dist$b, atoc = all.dist$a - all.dist$c)
+df4.s.long <- gather(df4.s, factor, diff, atob:atoc, factor_key=TRUE)
+plot(density(df4.s$atob))
+p2 = ggplot(df4.s.long, aes(x=diff))+geom_density(aes(group=factor, color =factor , fill=factor), alpha=0.3)+
+  stat_pointintervalh(aes(y = 0.00, x = diff, group=factor),.width = c(.66, .95))+#+facet_wrap(~contrast+time, nrow = 3, ncol = 2)+
+  theme_light()
+p2 = p2+scale_fill_manual( values = c("steelblue4", "orange", 'red'))+
+  scale_color_manual( values = c("steelblue4","grey", "steelblue1","steelblue4", "grey","grey", "grey","grey"))+theme(legend.position="none")#nice
+p2 = p2 + scale_y_continuous(name ="Density")
+p2 = p2 +geom_vline(xintercept = 0, color = "red", lty = 2)+ theme_light()
+p2 = p2 + coord_cartesian(xlim = c(0.0, 50))
+p2 = p2 + coord_cartesian(ylim = c(0.0, 0.1))
+# p2 = p2 + scale_x_continuous(name ="Standardized effect size")
+p2 = p2+facet_wrap(~factor)
+p2
+
+#Plotting
+library(ggplot2)
+library(tidybayes)
+p1 = ggplot(all.dist.long, aes(x=ecx))+geom_density(aes(group=factor, color =factor , fill=factor), alpha=0.3)+
+  stat_pointintervalh(aes(y = 0.00, x = ecx, group=factor),.width = c(.66, .95))+#+facet_wrap(~contrast+time, nrow = 3, ncol = 2)+
+  theme_light()
+p1 = p1+scale_fill_manual( values = c("steelblue4", "orange", 'red'))+
+  scale_color_manual( values = c("steelblue4","grey", "steelblue1","steelblue4", "grey","grey", "grey","grey"))+theme(legend.position="none")#nice
+p1 = p1 + scale_y_continuous(name ="Density")
+p1 = p1 + coord_cartesian(xlim = c(0.0, 50))
+p1 = p1 + coord_cartesian(ylim = c(0.0, 0.1))
+p1
+
+
+atob.diff = sort(df4.s$atob)
+nrow(df4.s)
+atob.diff[median.CI]
+median.ab<-atob.diff[median.CI] #find the 50%
+low.ab<-atob.diff[lowerCI] #find the bottom 2.5%
+up.ab<-atob.diff[upperCI] #find the top 2.5%
+ab.diff = data.frame(median.ab, low.ab, up.ab)
+ab.diff
+
+#probability
+length(which (all.dist$a < all.dist$b))/sims*100
+length(which (all.dist$a < all.dist$b))/sims*100
+
+length(which (all.dist$a < all.dist$c))/sims*100
+length(which (all.dist$a < all.dist$c))/sims*100
+
+
+
